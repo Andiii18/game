@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leckage-Ortungsspiel V6 - Neustart Button</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background-color: #f0f4f8; /* Hellgrauer Hintergrund */
+            margin: 0;
+            overflow: hidden;
+        }
+        #gameContainer {
+            border: 2px solid #334155; /* Dunkelblaugrauer Rand */
+            position: relative;
+            background-color: #d1d5db; /* Hellerer Hallenboden */
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-radius: 0.5rem;
+        }
+        canvas {
+            display: block;
+            border-radius: 0.375rem;
+        }
+        #scoreBoard {
+            margin-top: 15px; 
+            padding: 12px 20px; 
+            background-color: #ffffff;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            text-align: center;
+            color: #1e293b;
+            width: calc(100% - 40px); 
+            max-width: 800px; 
+        }
+        #scoreBoard h2 {
+            margin: 0 0 8px 0;
+            font-size: 1.3em; 
+            color: #0f172a;
+        }
+        #scoreBoard p {
+            margin: 4px 0;
+            font-size: 1.0em; 
+        }
+        #bannerModal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        #bannerModal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .banner-content {
+            background-color: white;
+            padding: 25px 35px; 
+            border-radius: 0.75rem;
+            text-align: center;
+            max-width: 500px; 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            color: #1e293b;
+        }
+        .banner-content h3 {
+            font-size: 1.6em; 
+            color: #0f172a;
+            margin-bottom: 12px;
+        }
+        .banner-content p {
+            font-size: 1.0em; 
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .game-button { /* General class for game buttons */
+            background-color: #2563eb;
+            color: white;
+            padding: 10px 20px; 
+            border: none;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.9em; 
+            transition: background-color 0.2s ease;
+            margin-top: 10px; /* Space above the button */
+        }
+        .game-button:hover {
+            background-color: #1d4ed8;
+        }
+        .instructions {
+            margin-top: 10px;
+            padding: 8px;
+            background-color: #f1f5f9;
+            border-radius: 0.375rem;
+            font-size: 0.85em;
+            color: #475569;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+    </div>
+
+    <div id="scoreBoard">
+        <h2>Spielstand</h2>
+        <p>Gefundene Leckagen: <span id="leaksFoundDisplay">0</span> / <span id="totalLeaksDisplay">0</span></p>
+        <p>Jährliches Einsparpotenzial: <span id="savingsDisplay">0</span> €</p>
+        <p>CO₂-Reduktion (Äquivalent): <span id="co2SavingsDisplay">0</span> kg</p>
+        <div class="instructions">
+            Pfeiltasten: Bewegen | Leertaste: Leckage orten
+        </div>
+        <button id="restartGameButton" class="game-button">Spiel Neustarten</button>
+    </div>
+
+    <div id="bannerModal">
+        <div class="banner-content">
+            <h3>Herzlichen Glückwunsch!</h3>
+            <p>Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">3</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">600</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.</p>
+            <button id="closeBannerButton" class="game-button">Weiterspielen</button>
+        </div>
+    </div>
+
+    <script>
+        // Canvas and context access
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI elements for score
+        const leaksFoundDisplayElement = document.getElementById('leaksFoundDisplay');
+        const totalLeaksDisplayElement = document.getElementById('totalLeaksDisplay');
+        const savingsDisplayElement = document.getElementById('savingsDisplay');
+        const co2SavingsDisplayElement = document.getElementById('co2SavingsDisplay');
+        
+        // Banner elements
+        const bannerModalElement = document.getElementById('bannerModal');
+        const bannerLeaksFoundElement = document.getElementById('bannerLeaksFound');
+        const bannerSavingsDisplayElement = document.getElementById('bannerSavingsDisplay');
+        let closeBannerButtonElement = document.getElementById('closeBannerButton'); // Use let for reassignment
+        
+        // Restart button
+        const restartGameButtonElement = document.getElementById('restartGameButton');
+
+
+        // Game parameters
+        const playerWidth = 20; 
+        const playerHeight = 25; 
+        const playerHeadRadius = 8; 
+        const playerSpeed = 3.5; 
+        const initialLeakRadius = 8; 
+        const foundLeakRadius = 6; 
+        const leakDetectionProximity = 15; 
+        const leakDetectionSoundRadius = 190; 
+        const leakValue = 200; 
+        const co2Factor = 0.15;
+        const numberOfLeaksToGenerate = 12;
+
+        // Sound parameters
+        const soundMinFreq = 80; 
+        const soundMaxFreq = 1000; 
+        const soundMinVol = -30; 
+        const soundMaxVol = -12; 
+
+
+        let player = {
+            x: 50,
+            y: 50,
+            colorBody: '#3b82f6', 
+            colorHead: '#fcd34d', 
+            shirtText: 'Mader'
+        };
+
+        let leaksArray = []; 
+        let machinesArray = []; 
+        let pipesArray = []; 
+
+        let leaksFoundCount = 0;
+        let totalSavingsValue = 0;
+        let gameRunning = true; 
+
+        let gameAreaWidth = 800;
+        let gameAreaHeight = 500;
+
+        let synth; 
+        let soundInitialized = false;
+
+        async function initializeAudio() {
+            if (soundInitialized || (Tone.context && Tone.context.state === 'running')) return;
+            try {
+                await Tone.start(); 
+                synth = new Tone.Oscillator({
+                    type: "sine", 
+                    frequency: 0, 
+                    volume: soundMinVol 
+                }).toDestination();
+                soundInitialized = true;
+                console.log("Audio context started by user interaction.");
+            } catch (e) {
+                console.error("Error starting audio context:", e);
+            }
+        }
+        
+        document.addEventListener('keydown', initializeAudio, { once: true });
+
+        function setupGameElements() {
+            canvas.width = gameAreaWidth;
+            canvas.height = gameAreaHeight;
+
+            player.x = canvas.width / 2 - playerWidth / 2;
+            player.y = canvas.height / 2 - playerHeight / 2;
+            
+            leaksArray = []; 
+            machinesArray = [];
+            pipesArray = [];
+            gameRunning = true;
+            leaksFoundCount = 0;
+            totalSavingsValue = 0;
+            updateScoreDisplay(); 
+
+            // Define machines
+            machinesArray.push({ id: 'm1', x: 80, y: 60, width: 70, height: 280, color: '#9ca3af', shadowColor: '#6b7280' }); 
+            machinesArray.push({ id: 'm2', x: 250, y: 120, width: 180, height: 50, color: '#9ca3af', shadowColor: '#6b7280' });
+            machinesArray.push({ id: 'm3', x: 580, y: 40, width: 50, height: 380, color: '#9ca3af', shadowColor: '#6b7280' });
+            machinesArray.push({ id: 'm4', x: 400, y: 320, width: 230, height: 70, color: '#9ca3af', shadowColor: '#6b7280' });
+            machinesArray.push({ id: 'm5', x: 700, y: 150, width: 60, height: 150, color: '#9ca3af', shadowColor: '#6b7280' });
+
+            // Define air pipes
+            pipesArray.push({startX: 0, startY: 30, endX: canvas.width, endY: 30, color: '#3b82f6', thickness: 4});
+            pipesArray.push({startX: 0, startY: canvas.height - 30, endX: canvas.width, endY: canvas.height - 30, color: '#3b82f6', thickness: 4});
+            pipesArray.push({startX: machinesArray[0].x + machinesArray[0].width / 2, startY: 30, endX: machinesArray[0].x + machinesArray[0].width / 2, endY: machinesArray[0].y, color: '#60a5fa', thickness: 3});
+            pipesArray.push({startX: machinesArray[1].x, startY: machinesArray[1].y + machinesArray[1].height / 2, endX: machinesArray[1].x + machinesArray[1].width, endY: machinesArray[1].y + machinesArray[1].height / 2, color: '#60a5fa', thickness: 3});
+            pipesArray.push({startX: machinesArray[1].x + machinesArray[1].width / 2, startY: 30, endX: machinesArray[1].x + machinesArray[1].width / 2, endY: machinesArray[1].y, color: '#60a5fa', thickness: 3});
+            pipesArray.push({startX: machinesArray[2].x + machinesArray[2].width / 2, startY: machinesArray[2].y, endX: machinesArray[2].x + machinesArray[2].width/2, endY: machinesArray[2].y + machinesArray[2].height, color: '#60a5fa', thickness: 3});
+            pipesArray.push({startX: machinesArray[3].x + machinesArray[3].width/2, startY: machinesArray[3].y, endX: machinesArray[3].x + machinesArray[3].width/2, endY: canvas.height - 30, color: '#60a5fa', thickness: 3});
+            pipesArray.push({startX: machinesArray[4].x, startY: machinesArray[4].y + machinesArray[4].height/2, endX: canvas.width, endY: machinesArray[4].y + machinesArray[4].height/2, color: '#60a5fa', thickness: 3});
+
+            // Generate leaks
+            for (let i = 0; i < numberOfLeaksToGenerate; i++) {
+                let leakX, leakY, validPosition;
+                let attempts = 0;
+                do {
+                    validPosition = true;
+                    attempts++;
+
+                    if (pipesArray.length > 0 && Math.random() < 0.8 && attempts < 50) { 
+                        const pipe = pipesArray[Math.floor(Math.random() * pipesArray.length)];
+                        const t = Math.random(); 
+                        leakX = pipe.startX + t * (pipe.endX - pipe.startX);
+                        leakY = pipe.startY + t * (pipe.endY - pipe.startY);
+                        leakX += (Math.random() - 0.5) * 10;
+                        leakY += (Math.random() - 0.5) * 10;
+                    } else { 
+                        leakX = Math.random() * (canvas.width - initialLeakRadius * 4) + initialLeakRadius * 2;
+                        leakY = Math.random() * (canvas.height - initialLeakRadius * 4) + initialLeakRadius * 2;
+                    }
+                    
+                    leakX = Math.max(initialLeakRadius, Math.min(leakX, canvas.width - initialLeakRadius));
+                    leakY = Math.max(initialLeakRadius, Math.min(leakY, canvas.height - initialLeakRadius));
+
+                    for (const machine of machinesArray) {
+                        if (leakX > machine.x - initialLeakRadius && leakX < machine.x + machine.width + initialLeakRadius &&
+                            leakY > machine.y - initialLeakRadius && leakY < machine.y + machine.height + initialLeakRadius) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                    if (validPosition) {
+                        for (const existingLeak of leaksArray) {
+                            const dist = Math.sqrt((leakX - existingLeak.x)**2 + (leakY - existingLeak.y)**2);
+                            if (dist < initialLeakRadius * 5) { 
+                                validPosition = false;
+                                break;
+                            }
+                        }
+                    }
+                } while (!validPosition && attempts < 100); 
+                
+                if(validPosition){ 
+                    leaksArray.push({ x: leakX, y: leakY, found: false, radius: initialLeakRadius });
+                }
+            }
+            totalLeaksDisplayElement.textContent = leaksArray.length; 
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = player.colorBody;
+            ctx.fillRect(player.x, player.y, playerWidth, playerHeight);
+            ctx.fillStyle = player.colorHead;
+            ctx.beginPath();
+            ctx.arc(player.x + playerWidth / 2, player.y - playerHeadRadius / 2 + 2 , playerHeadRadius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'white'; 
+            ctx.font = 'bold 10px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText(player.shirtText, player.x + playerWidth / 2, player.y + playerHeight / 2 + 3);
+        }
+        
+        function drawHallBackground() {
+            ctx.strokeStyle = '#a1a1aa'; 
+            ctx.lineWidth = 0.5; 
+            const gridSize = 40;
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+        }
+
+        function drawPipes() {
+            pipesArray.forEach(pipe => {
+                ctx.beginPath();
+                ctx.moveTo(pipe.startX, pipe.startY);
+                ctx.lineTo(pipe.endX, pipe.endY);
+                ctx.strokeStyle = pipe.color;
+                ctx.lineWidth = pipe.thickness;
+                ctx.stroke();
+            });
+        }
+
+        function drawLeaks() {
+            leaksArray.forEach(leak => {
+                if (leak.found) { 
+                    ctx.beginPath();
+                    ctx.arc(leak.x, leak.y, foundLeakRadius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#10b981'; 
+                    ctx.fill();
+                    ctx.strokeStyle = 'white';
+                    ctx.lineWidth = 1.5;
+                    ctx.moveTo(leak.x - foundLeakRadius*0.6, leak.y - foundLeakRadius*0.6);
+                    ctx.lineTo(leak.x + foundLeakRadius*0.6, leak.y + foundLeakRadius*0.6);
+                    ctx.moveTo(leak.x + foundLeakRadius*0.6, leak.y - foundLeakRadius*0.6);
+                    ctx.lineTo(leak.x - foundLeakRadius*0.6, leak.y + foundLeakRadius*0.6);
+                    ctx.stroke();
+                }
+            });
+        }
+        
+        function drawMachines() {
+            machinesArray.forEach(machine => {
+                const shadowOffset = 4;
+                ctx.fillStyle = machine.shadowColor;
+                ctx.fillRect(machine.x + shadowOffset, machine.y + shadowOffset, machine.width, machine.height);
+                ctx.fillStyle = machine.color;
+                ctx.fillRect(machine.x, machine.y, machine.width, machine.height);
+                ctx.strokeStyle = '#4b5563'; 
+                ctx.lineWidth = 1;
+                ctx.strokeRect(machine.x, machine.y, machine.width, machine.height);
+            });
+        }
+
+        function updateScoreDisplay() {
+            leaksFoundDisplayElement.textContent = leaksFoundCount;
+            totalLeaksDisplayElement.textContent = leaksArray.length; 
+            savingsDisplayElement.textContent = totalSavingsValue;
+            const currentCo2Savings = totalSavingsValue * co2Factor;
+            co2SavingsDisplayElement.textContent = currentCo2Savings.toFixed(2);
+
+            if (leaksFoundCount === 3 && !bannerModalElement.classList.contains('show') && gameRunning) {
+                bannerLeaksFoundElement.textContent = leaksFoundCount;
+                bannerSavingsDisplayElement.textContent = totalSavingsValue;
+                document.querySelector('#bannerModal .banner-content h3').textContent = "Herzlichen Glückwunsch!"; 
+                document.querySelector('#bannerModal .banner-content p').innerHTML = `Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">${leaksFoundCount}</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">${totalSavingsValue}</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
+                
+                // Ensure the banner button is for "Weiterspielen"
+                const newBannerBtn = closeBannerButtonElement.cloneNode(true);
+                newBannerBtn.textContent = "Weiterspielen";
+                closeBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeBannerButtonElement);
+                closeBannerButtonElement = newBannerBtn; // Update reference
+                closeBannerButtonElement.onclick = () => bannerModalElement.classList.remove('show'); // Simple hide
+
+                bannerModalElement.classList.add('show');
+            }
+            
+            if (leaksArray.length > 0 && leaksFoundCount === leaksArray.length && gameRunning) { 
+                gameRunning = false; 
+                setTimeout(() => { 
+                    bannerLeaksFoundElement.textContent = leaksFoundCount; 
+                    bannerSavingsDisplayElement.textContent = totalSavingsValue; 
+                    document.querySelector('#bannerModal .banner-content h3').textContent = "Alle Lecks gefunden!";
+                    document.querySelector('#bannerModal .banner-content p').innerHTML = `Fantastisch! Du hast alle ${leaksFoundCount} Leckagen gefunden und ein Gesamt-Einsparpotenzial von ${totalSavingsValue}€ aufgedeckt. <br>Kontaktiere uns, um dieses Potenzial auch in deiner Produktion zu realisieren!`;
+                    
+                    const newBannerBtn = closeBannerButtonElement.cloneNode(true);
+                    newBannerBtn.textContent = "Neustart";
+                    closeBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeBannerButtonElement);
+                    closeBannerButtonElement = newBannerBtn; // Update reference
+                    closeBannerButtonElement.onclick = () => { // Assign restart logic
+                        bannerModalElement.classList.remove('show');
+                        startGame();
+                    };
+
+                    bannerModalElement.classList.add('show');
+                    
+                    if (soundInitialized && synth && synth.state === "started") {
+                        synth.stop(); 
+                    }
+                }, 500);
+            }
+        }
+        
+        // Event listener for the main restart button (outside the banner)
+        restartGameButtonElement.addEventListener('click', () => {
+            if (soundInitialized && synth && synth.state === "started") {
+                synth.stop(); // Stop sound immediately on manual restart
+            }
+            startGame();
+        });
+
+        // Initial setup for the banner close button (handles "Weiterspielen")
+        // This will be overridden if the "Alle Lecks gefunden" banner appears.
+        closeBannerButtonElement.onclick = () => {
+            if (gameRunning) { 
+                 bannerModalElement.classList.remove('show');
+            }
+        };
+
+
+        function checkCollisionWithMachine(playerObj, machineObj) {
+            const playerCollisionBox = {
+                x: playerObj.x,
+                y: playerObj.y - playerHeadRadius, 
+                width: playerWidth,
+                height: playerHeight + playerHeadRadius
+            };
+            return playerCollisionBox.x < machineObj.x + machineObj.width &&
+                   playerCollisionBox.x + playerCollisionBox.width > machineObj.x &&
+                   playerCollisionBox.y < machineObj.y + machineObj.height &&
+                   playerCollisionBox.y + playerCollisionBox.height > machineObj.y;
+        }
+
+        let animationFrameId_gameLoop;
+        let animationFrameId_movementLoop;
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#d1d5db'; 
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            
+            drawHallBackground(); 
+            drawPipes(); 
+            drawMachines(); 
+            drawLeaks(); 
+            drawPlayer();
+
+            if (!gameRunning && !bannerModalElement.classList.contains('show')) { 
+                 ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                 ctx.fillRect(0,0,canvas.width, canvas.height);
+                 ctx.font = "28px Inter";
+                 ctx.fillStyle = "white";
+                 ctx.textAlign = "center";
+                 ctx.fillText("Alle Leckagen gefunden!", canvas.width / 2, canvas.height / 2 - 20);
+                 ctx.font = "18px Inter";
+                 ctx.fillText("Klicke auf 'Neustart' im Banner oder den Button unten.", canvas.width/2, canvas.height/2 + 20);
+            }
+
+            if (!gameRunning) { 
+                animationFrameId_gameLoop = requestAnimationFrame(gameLoop); 
+                return;
+            }
+
+            let closestLeakDistance = Infinity;
+            let activeLeakSound = false;
+
+            leaksArray.forEach(leak => {
+                if (!leak.found) {
+                    const playerCenterX = player.x + playerWidth / 2;
+                    const playerCenterY = player.y + playerHeight / 2 - playerHeadRadius / 2;
+                    const distance = Math.sqrt(
+                        (playerCenterX - leak.x) ** 2 +
+                        (playerCenterY - leak.y) ** 2
+                    );
+
+                    if (distance < leakDetectionSoundRadius) {
+                        activeLeakSound = true;
+                        if (distance < closestLeakDistance) {
+                            closestLeakDistance = distance;
+                        }
+                    }
+                }
+            });
+
+            if (soundInitialized && synth) {
+                if (activeLeakSound && gameRunning) { 
+                    const freqRange = soundMaxFreq - soundMinFreq;
+                    let targetFrequency = soundMaxFreq - (closestLeakDistance / leakDetectionSoundRadius) * freqRange;
+                    targetFrequency = Math.max(soundMinFreq, Math.min(soundMaxFreq, targetFrequency));
+                    synth.frequency.rampTo(targetFrequency, 0.05);
+
+                    const volRange = soundMaxVol - soundMinVol; 
+                    let targetVolume = soundMinVol + (1 - (closestLeakDistance / leakDetectionSoundRadius)) * volRange;
+                    targetVolume = Math.max(soundMinVol, Math.min(soundMaxVol, targetVolume));
+                    synth.volume.rampTo(targetVolume, 0.05);
+
+                    if (synth.state === "stopped") {
+                        synth.start();
+                    }
+                } else { 
+                    if (synth.state === "started") {
+                         synth.volume.rampTo(-Infinity, 0.2, Tone.now(), () => { 
+                           if(synth.state === "started") synth.stop();
+                           synth.volume.value = soundMinVol; 
+                        });
+                    }
+                }
+            }
+            animationFrameId_gameLoop = requestAnimationFrame(gameLoop);
+        }
+
+        const keysPressed = {};
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && bannerModalElement.classList.contains('show')) {
+                bannerModalElement.classList.remove('show');
+                return;
+            }
+            if (!gameRunning && !(event.key === ' ' && bannerModalElement.classList.contains('show'))) return; 
+            
+            keysPressed[event.key] = true;
+
+            if (!soundInitialized) { 
+                initializeAudio();
+            }
+
+            if (event.key === ' ' && gameRunning) { 
+                event.preventDefault(); 
+                leaksArray.forEach(leak => {
+                    if (!leak.found) {
+                        const playerCenterX = player.x + playerWidth / 2;
+                        const playerCenterY = player.y + playerHeight / 2 - playerHeadRadius / 2;
+                        const distance = Math.sqrt(
+                            (playerCenterX - leak.x) ** 2 +
+                            (playerCenterY - leak.y) ** 2
+                        );
+                        if (distance < leakDetectionProximity + leak.radius) { 
+                            leak.found = true;
+                            leaksFoundCount++;
+                            totalSavingsValue += leakValue;
+                            updateScoreDisplay(); 
+                        }
+                    }
+                });
+            }
+        });
+
+        document.addEventListener('keyup', (event) => {
+            keysPressed[event.key] = false;
+        });
+
+        function handleMovement() {
+            if (!gameRunning) return; 
+
+            let newPlayerX = player.x;
+            let newPlayerY = player.y;
+
+            if (keysPressed['ArrowUp'] || keysPressed['w']) {
+                newPlayerY -= playerSpeed;
+            }
+            if (keysPressed['ArrowDown'] || keysPressed['s']) {
+                newPlayerY += playerSpeed;
+            }
+            if (keysPressed['ArrowLeft'] || keysPressed['a']) {
+                newPlayerX -= playerSpeed;
+            }
+            if (keysPressed['ArrowRight'] || keysPressed['d']) {
+                newPlayerX += playerSpeed;
+            }
+            
+            const playerTop = newPlayerY - playerHeadRadius;
+            const playerBottom = newPlayerY + playerHeight;
+            const playerLeft = newPlayerX;
+            const playerRight = newPlayerX + playerWidth;
+
+            if (playerLeft < 0) newPlayerX = 0;
+            if (playerRight > canvas.width) newPlayerX = canvas.width - playerWidth;
+            if (playerTop < 0) newPlayerY = playerHeadRadius; 
+            if (playerBottom > canvas.height) newPlayerY = canvas.height - playerHeight;
+
+            const tempPlayerAttempt = { x: newPlayerX, y: newPlayerY }; 
+            
+            let collision = false;
+            for (const machine of machinesArray) {
+                if (checkCollisionWithMachine(tempPlayerAttempt, machine)) {
+                    collision = true;
+                    break;
+                }
+            }
+            
+            if (!collision) {
+                 player.x = newPlayerX;
+                 player.y = newPlayerY;
+            } else {
+                const tempPlayerXOnly = { ...player, x: newPlayerX };
+                let collisionX = false;
+                for (const machine of machinesArray) {
+                    if (checkCollisionWithMachine(tempPlayerXOnly, machine)) {
+                        collisionX = true;
+                        break;
+                    }
+                }
+                if (!collisionX) {
+                    player.x = newPlayerX; 
+                }
+
+                const tempPlayerYOnly = { ...player, y: newPlayerY }; 
+                 if(!collisionX) tempPlayerYOnly.x = player.x; 
+
+                let collisionY = false;
+                for (const machine of machinesArray) {
+                    if (checkCollisionWithMachine(tempPlayerYOnly, machine)) {
+                        collisionY = true;
+                        break;
+                    }
+                }
+                if (!collisionY) {
+                     player.y = newPlayerY; 
+                }
+            }
+            player.x = Math.max(0, Math.min(player.x, canvas.width - playerWidth));
+            player.y = Math.max(playerHeadRadius, Math.min(player.y, canvas.height - playerHeight));
+        }
+        
+        function movementLoop() {
+            handleMovement();
+            animationFrameId_movementLoop = requestAnimationFrame(movementLoop);
+        }
+
+        function resetBannerToDefault() {
+            const bannerH3 = document.querySelector('#bannerModal .banner-content h3');
+            const bannerP = document.querySelector('#bannerModal .banner-content p');
+            
+            bannerH3.textContent = "Herzlichen Glückwunsch!";
+            bannerP.innerHTML = `Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">3</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">600</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
+            
+            // Ensure banner button is set for "Weiterspielen"
+            const newBannerBtn = closeBannerButtonElement.cloneNode(true);
+            newBannerBtn.textContent = "Weiterspielen";
+            closeBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeBannerButtonElement);
+            closeBannerButtonElement = newBannerBtn; // Update global reference
+            closeBannerButtonElement.onclick = () => bannerModalElement.classList.remove('show');
+        }
+
+
+        function startGame() {
+            if (animationFrameId_gameLoop) cancelAnimationFrame(animationFrameId_gameLoop);
+            if (animationFrameId_movementLoop) cancelAnimationFrame(animationFrameId_movementLoop);
+
+            bannerModalElement.classList.remove('show'); 
+            resetBannerToDefault(); 
+
+            setupGameElements(); 
+            updateScoreDisplay(); 
+            
+            if (!soundInitialized || (Tone.context && Tone.context.state !== 'running')) {
+                 initializeAudio().then(() => {
+                    if (synth && synth.state === "stopped") synth.volume.value = soundMinVol; 
+                 });
+            } else if (soundInitialized && synth ){
+                 if(synth.state === "started") synth.stop(); 
+                 synth.volume.value = soundMinVol; 
+            }
+            gameLoop(); 
+            movementLoop(); 
+        }
+        
+        startGame();
+
+    </script>
+</body>
+</html>
