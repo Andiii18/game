@@ -160,8 +160,8 @@
         const infoBannerModalElement = document.getElementById('infoBannerModal');
         const infoBannerTitleElement = document.getElementById('infoBannerTitle');
         const infoBannerTextElement = document.getElementById('infoBannerText');
-        const bannerLeaksFoundElement = document.getElementById('bannerLeaksFound'); // Still needed if text is dynamic
-        const bannerSavingsDisplayElement = document.getElementById('bannerSavingsDisplay'); // Still needed
+        // const bannerLeaksFoundElement = document.getElementById('bannerLeaksFound'); // Not directly used, but spans are in HTML
+        // const bannerSavingsDisplayElement = document.getElementById('bannerSavingsDisplay'); // Not directly used, but spans are in HTML
         let closeInfoBannerButtonElement = document.getElementById('closeInfoBannerButton');
         
         // Volume Banner elements
@@ -176,20 +176,20 @@
         const playerHeight = 25; 
         const playerHeadRadius = 8; 
         const playerSpeed = 3.5; 
-        const initialLeakRadius = 8; 
-        const foundLeakRadius = 6; 
-        const leakDetectionProximity = 30; // Increased radius for easier detection
+        const initialLeakRadius = 8; // Internal radius for leak logic
+        const foundLeakRadius = 6; // Visual radius of a found leak
+        const leakDetectionProximity = 30; // Increased radius for easier detection with spacebar
         const playerHighlightRadius = 25; // Radius for player visual highlight when very close to an unfound leak
-        const leakDetectionSoundRadius = 190; 
-        const leakValue = 200; 
-        const co2Factor = 0.15;
+        const leakDetectionSoundRadius = 190; // Radius for hearing the leak sound
+        const leakValue = 200; // Savings per leak
+        const co2Factor = 0.15; // Example CO2 factor
         const numberOfLeaksToGenerate = 12;
 
         // Sound parameters
         const soundMinFreq = 80; 
         const soundMaxFreq = 1000; 
-        const soundMinVol = -30; 
-        const soundMaxVol = -12; 
+        const soundMinVol = -30; // in dB
+        const soundMaxVol = -12; // in dB
 
         let player = {
             x: 50,
@@ -214,6 +214,7 @@
         let synth; 
         let soundInitialized = false;
 
+        // Function to initialize sound (triggered by user interaction)
         async function initializeAudio() {
             if (soundInitialized || (Tone.context && Tone.context.state === 'running')) return;
             try {
@@ -230,37 +231,42 @@
             }
         }
         
-        // Initial audio context start attempt on any key press (important for browsers)
+        // Initial audio context start attempt on any key press
         document.addEventListener('keydown', initializeAudio, { once: true });
         // Also attempt on first click/touch for mobile or mouse users before keyboard interaction
         document.addEventListener('click', initializeAudio, { once: true });
         document.addEventListener('touchstart', initializeAudio, { once: true });
 
 
+        // Function to set up all game elements (player, leaks, machines, pipes)
         function setupGameElements() {
             canvas.width = gameAreaWidth;
             canvas.height = gameAreaHeight;
 
+            // Reset player position and state
             player.x = canvas.width / 2 - playerWidth / 2;
             player.y = canvas.height / 2 - playerHeight / 2;
             player.isHighlighted = false;
             
+            // Clear existing game elements
             leaksArray = []; 
             machinesArray = [];
             pipesArray = [];
+
+            // Reset game state variables
             gameRunning = true;
             leaksFoundCount = 0;
             totalSavingsValue = 0;
-            updateScoreDisplay(); 
+            updateScoreDisplay(); // Update display to show 0/X leaks found
 
-            // Define machines
+            // Define machines (obstacles)
             machinesArray.push({ id: 'm1', x: 80, y: 60, width: 70, height: 280, color: '#9ca3af', shadowColor: '#6b7280' }); 
             machinesArray.push({ id: 'm2', x: 250, y: 120, width: 180, height: 50, color: '#9ca3af', shadowColor: '#6b7280' });
             machinesArray.push({ id: 'm3', x: 580, y: 40, width: 50, height: 380, color: '#9ca3af', shadowColor: '#6b7280' });
             machinesArray.push({ id: 'm4', x: 400, y: 320, width: 230, height: 70, color: '#9ca3af', shadowColor: '#6b7280' });
             machinesArray.push({ id: 'm5', x: 700, y: 150, width: 60, height: 150, color: '#9ca3af', shadowColor: '#6b7280' });
 
-            // Define air pipes
+            // Define air pipes (visual elements)
             pipesArray.push({startX: 0, startY: 30, endX: canvas.width, endY: 30, color: '#3b82f6', thickness: 4});
             pipesArray.push({startX: 0, startY: canvas.height - 30, endX: canvas.width, endY: canvas.height - 30, color: '#3b82f6', thickness: 4});
             pipesArray.push({startX: machinesArray[0].x + machinesArray[0].width / 2, startY: 30, endX: machinesArray[0].x + machinesArray[0].width / 2, endY: machinesArray[0].y, color: '#60a5fa', thickness: 3});
@@ -270,29 +276,33 @@
             pipesArray.push({startX: machinesArray[3].x + machinesArray[3].width/2, startY: machinesArray[3].y, endX: machinesArray[3].x + machinesArray[3].width/2, endY: canvas.height - 30, color: '#60a5fa', thickness: 3});
             pipesArray.push({startX: machinesArray[4].x, startY: machinesArray[4].y + machinesArray[4].height/2, endX: canvas.width, endY: machinesArray[4].y + machinesArray[4].height/2, color: '#60a5fa', thickness: 3});
 
-            // Generate leaks
+            // Generate leaks at random positions, preferably near pipes
             for (let i = 0; i < numberOfLeaksToGenerate; i++) {
                 let leakX, leakY, validPosition;
-                let attempts = 0;
+                let attempts = 0; // To prevent infinite loops
                 do {
                     validPosition = true;
                     attempts++;
 
+                    // 80% chance to place near a pipe, if pipes exist
                     if (pipesArray.length > 0 && Math.random() < 0.8 && attempts < 50) { 
                         const pipe = pipesArray[Math.floor(Math.random() * pipesArray.length)];
-                        const t = Math.random(); 
+                        const t = Math.random(); // Position along the pipe (0 to 1)
                         leakX = pipe.startX + t * (pipe.endX - pipe.startX);
                         leakY = pipe.startY + t * (pipe.endY - pipe.startY);
+                        // Add small random offset from the pipe
                         leakX += (Math.random() - 0.5) * 10;
                         leakY += (Math.random() - 0.5) * 10;
-                    } else { 
+                    } else { // Fallback to random position in the hall
                         leakX = Math.random() * (canvas.width - initialLeakRadius * 4) + initialLeakRadius * 2;
                         leakY = Math.random() * (canvas.height - initialLeakRadius * 4) + initialLeakRadius * 2;
                     }
                     
+                    // Ensure leak is within canvas bounds
                     leakX = Math.max(initialLeakRadius, Math.min(leakX, canvas.width - initialLeakRadius));
                     leakY = Math.max(initialLeakRadius, Math.min(leakY, canvas.height - initialLeakRadius));
 
+                    // Check if leak is inside a machine
                     for (const machine of machinesArray) {
                         if (leakX > machine.x - initialLeakRadius && leakX < machine.x + machine.width + initialLeakRadius &&
                             leakY > machine.y - initialLeakRadius && leakY < machine.y + machine.height + initialLeakRadius) {
@@ -300,41 +310,47 @@
                             break;
                         }
                     }
+                    // Check if leak is too close to another existing leak
                     if (validPosition) {
                         for (const existingLeak of leaksArray) {
                             const dist = Math.sqrt((leakX - existingLeak.x)**2 + (leakY - existingLeak.y)**2);
-                            if (dist < initialLeakRadius * 5) { 
+                            if (dist < initialLeakRadius * 5) { // Minimum distance between leaks
                                 validPosition = false;
                                 break;
                             }
                         }
                     }
-                } while (!validPosition && attempts < 100); 
+                } while (!validPosition && attempts < 100); // Limit attempts to find a valid position
                 
-                if(validPosition){ 
+                if(validPosition){ // Add leak if a valid position was found
                     leaksArray.push({ x: leakX, y: leakY, found: false, radius: initialLeakRadius });
                 }
             }
-            totalLeaksDisplayElement.textContent = leaksArray.length; 
+            totalLeaksDisplayElement.textContent = leaksArray.length; // Update total number of leaks displayed
         }
 
+        // Function to draw the player character
         function drawPlayer() {
-            // Normal player drawing
+            // Draw player body
             ctx.fillStyle = player.colorBody;
             ctx.fillRect(player.x, player.y, playerWidth, playerHeight);
+            
+            // Draw player head
             ctx.fillStyle = player.colorHead;
             ctx.beginPath();
             ctx.arc(player.x + playerWidth / 2, player.y - playerHeadRadius / 2 + 2 , playerHeadRadius, 0, Math.PI * 2);
             ctx.fill();
+
+            // Draw shirt text
             ctx.fillStyle = 'white'; 
             ctx.font = 'bold 10px Inter';
             ctx.textAlign = 'center';
             ctx.fillText(player.shirtText, player.x + playerWidth / 2, player.y + playerHeight / 2 + 3);
 
-            // Visual highlight if player is close to an unfound leak
+            // Draw visual highlight if player is close to an unfound leak
             if (player.isHighlighted) {
                 ctx.strokeStyle = '#FFD700'; // Gold color for highlight
-                ctx.lineWidth = 2.5; // Slightly thinner highlight
+                ctx.lineWidth = 2.5; 
                 // Highlight around the body
                 ctx.strokeRect(
                     player.x - ctx.lineWidth / 2, 
@@ -354,6 +370,7 @@
             }
         }
         
+        // Function to draw the hall background (grid lines)
         function drawHallBackground() {
             ctx.strokeStyle = '#a1a1aa'; 
             ctx.lineWidth = 0.5; 
@@ -372,6 +389,7 @@
             }
         }
 
+        // Function to draw the air pipes
         function drawPipes() {
             pipesArray.forEach(pipe => {
                 ctx.beginPath();
@@ -383,13 +401,15 @@
             });
         }
 
+        // Function to draw the leaks (only found leaks are visible)
         function drawLeaks() {
             leaksArray.forEach(leak => {
-                if (leak.found) { 
+                if (leak.found) { // Only draw found leaks
                     ctx.beginPath();
                     ctx.arc(leak.x, leak.y, foundLeakRadius, 0, Math.PI * 2);
-                    ctx.fillStyle = '#10b981'; 
+                    ctx.fillStyle = '#10b981'; // Green for found leaks
                     ctx.fill();
+                    // Add a white cross over found leaks for better visibility
                     ctx.strokeStyle = 'white';
                     ctx.lineWidth = 1.5;
                     ctx.moveTo(leak.x - foundLeakRadius*0.6, leak.y - foundLeakRadius*0.6);
@@ -398,22 +418,28 @@
                     ctx.lineTo(leak.x - foundLeakRadius*0.6, leak.y + foundLeakRadius*0.6);
                     ctx.stroke();
                 }
+                // Undiscovered leaks are not drawn
             });
         }
         
+        // Function to draw the machines (obstacles)
         function drawMachines() {
             machinesArray.forEach(machine => {
                 const shadowOffset = 4;
+                // Draw shadow first for 3D effect
                 ctx.fillStyle = machine.shadowColor;
                 ctx.fillRect(machine.x + shadowOffset, machine.y + shadowOffset, machine.width, machine.height);
+                // Draw machine body
                 ctx.fillStyle = machine.color;
                 ctx.fillRect(machine.x, machine.y, machine.width, machine.height);
+                // Add border for definition
                 ctx.strokeStyle = '#4b5563'; 
                 ctx.lineWidth = 1;
                 ctx.strokeRect(machine.x, machine.y, machine.width, machine.height);
             });
         }
 
+        // Function to update the score display and handle banner logic
         function updateScoreDisplay() {
             leaksFoundDisplayElement.textContent = leaksFoundCount;
             totalLeaksDisplayElement.textContent = leaksArray.length; 
@@ -421,102 +447,115 @@
             const currentCo2Savings = totalSavingsValue * co2Factor;
             co2SavingsDisplayElement.textContent = currentCo2Savings.toFixed(2);
 
-            // Using bannerLeaksFoundElement and bannerSavingsDisplayElement inside the text strings
+            // Dynamic HTML for banner content (using template literals for clarity)
             const bannerLeaksFoundHTML = `<span id="bannerLeaksFound">${leaksFoundCount}</span>`;
             const bannerSavingsHTML = `<span id="bannerSavingsDisplay">${totalSavingsValue}</span>`;
 
-
+            // Show banner when 3 leaks are found
             if (leaksFoundCount === 3 && !infoBannerModalElement.classList.contains('show') && gameRunning) {
                 infoBannerTitleElement.textContent = "Herzlichen Glückwunsch!"; 
                 infoBannerTextElement.innerHTML = `Mit nur wenigen Klicks hast du bereits ${bannerLeaksFoundHTML} Leckagen und ein jährliches Einsparpotenzial von ${bannerSavingsHTML}€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
                 
+                // Clone and replace button to ensure correct listener for "Weiterspielen"
                 const newBannerBtn = closeInfoBannerButtonElement.cloneNode(true);
                 newBannerBtn.textContent = "Weiterspielen";
                 closeInfoBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeInfoBannerButtonElement);
-                closeInfoBannerButtonElement = newBannerBtn; 
+                closeInfoBannerButtonElement = newBannerBtn; // Update global reference
                 closeInfoBannerButtonElement.onclick = () => infoBannerModalElement.classList.remove('show'); 
 
                 infoBannerModalElement.classList.add('show');
             }
             
+            // Show banner when all leaks are found
             if (leaksArray.length > 0 && leaksFoundCount === leaksArray.length && gameRunning) { 
-                gameRunning = false; 
-                setTimeout(() => { 
-                    // Update dynamic spans for the final banner text
+                gameRunning = false; // Stop the game
+                setTimeout(() => { // Delay to allow player to see the last found leak
                     const finalBannerLeaksFoundHTML = `<span id="bannerLeaksFound">${leaksFoundCount}</span>`;
                     const finalBannerSavingsHTML = `<span id="bannerSavingsDisplay">${totalSavingsValue}</span>`;
 
                     infoBannerTitleElement.textContent = "Alle Lecks gefunden!";
                     infoBannerTextElement.innerHTML = `Fantastisch! Du hast alle ${finalBannerLeaksFoundHTML} Leckagen gefunden und ein Gesamt-Einsparpotenzial von ${finalBannerSavingsHTML}€ aufgedeckt. <br>Kontaktiere uns, um dieses Potenzial auch in deiner Produktion zu realisieren!`;
                     
+                    // Clone and replace button to ensure correct listener for "Neustart"
                     const newBannerBtn = closeInfoBannerButtonElement.cloneNode(true);
                     newBannerBtn.textContent = "Neustart";
                     closeInfoBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeInfoBannerButtonElement);
                     closeInfoBannerButtonElement = newBannerBtn; 
                     closeInfoBannerButtonElement.onclick = () => { 
                         infoBannerModalElement.classList.remove('show');
-                        startGame();
+                        startGame(); // Restart the game
                     };
 
                     infoBannerModalElement.classList.add('show');
                     
+                    // Stop sound when all leaks are found
                     if (soundInitialized && synth && synth.state === "started") {
                         synth.stop(); 
                     }
-                }, 500);
+                }, 500); // 0.5 second delay
             }
         }
         
+        // Event listener for the main restart button (in the scoreboard)
         restartGameButtonElement.addEventListener('click', () => {
             if (soundInitialized && synth && synth.state === "started") {
-                synth.stop(); 
+                synth.stop(); // Stop sound immediately on manual restart
             }
-            startGame();
+            startGame(); // Restart the game
         });
 
+        // Initial event listener for the info banner close button (handles "Weiterspielen")
         closeInfoBannerButtonElement.onclick = () => {
-            if (gameRunning) { 
+            if (gameRunning) { // Only close if game is running (i.e., it's the "Weiterspielen" state)
                  infoBannerModalElement.classList.remove('show');
             }
+            // If !gameRunning, the "Neustart" button's specific listener (added in updateScoreDisplay) will handle it.
         };
 
+        // Event listener for the volume banner close button
         closeVolumeBannerButtonElement.addEventListener('click', () => {
             volumeBannerModalElement.classList.remove('show');
-            // Optional: Start audio context here if not already started,
-            // as this is a definite user interaction.
+            // Attempt to initialize audio if not already done, as this is a clear user interaction
             if (!soundInitialized) {
                 initializeAudio();
             }
         });
 
-
+        // Function to check collision between player and a machine
         function checkCollisionWithMachine(playerObj, machineObj) {
+            // Define player's collision box (approximating with head)
             const playerCollisionBox = {
                 x: playerObj.x,
                 y: playerObj.y - playerHeadRadius, 
                 width: playerWidth,
                 height: playerHeight + playerHeadRadius
             };
+            // Standard AABB collision detection
             return playerCollisionBox.x < machineObj.x + machineObj.width &&
                    playerCollisionBox.x + playerCollisionBox.width > machineObj.x &&
                    playerCollisionBox.y < machineObj.y + machineObj.height &&
                    playerCollisionBox.y + playerCollisionBox.height > machineObj.y;
         }
 
+        // Animation frame IDs for managing game loops
         let animationFrameId_gameLoop;
         let animationFrameId_movementLoop;
 
+        // Main game loop for drawing and sound updates
         function gameLoop() {
+            // Clear the canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#d1d5db'; 
+            ctx.fillStyle = '#d1d5db'; // Hall background color
             ctx.fillRect(0,0, canvas.width, canvas.height);
             
+            // Draw game elements in order
             drawHallBackground(); 
             drawPipes(); 
             drawMachines(); 
             drawLeaks(); 
-            // Player highlight status update
-            player.isHighlighted = false; // Reset before check
+
+            // Update player highlight status based on proximity to unfound leaks
+            player.isHighlighted = false; 
             if (gameRunning) {
                 for (const leak of leaksArray) {
                     if (!leak.found) {
@@ -528,13 +567,14 @@
                         );
                         if (distance < playerHighlightRadius) {
                             player.isHighlighted = true;
-                            break; 
+                            break; // Highlight if close to any unfound leak
                         }
                     }
                 }
             }
             drawPlayer(); // Draw player after highlight status is set
 
+            // Display "Game Over" message on canvas if game ended and banner is closed
             if (!gameRunning && !infoBannerModalElement.classList.contains('show')) { 
                  ctx.fillStyle = 'rgba(0,0,0,0.7)';
                  ctx.fillRect(0,0,canvas.width, canvas.height);
@@ -546,11 +586,13 @@
                  ctx.fillText("Klicke auf 'Neustart' im Banner oder den Button unten.", canvas.width/2, canvas.height/2 + 20);
             }
 
+            // If game is not running, just keep drawing the final state and return
             if (!gameRunning) { 
                 animationFrameId_gameLoop = requestAnimationFrame(gameLoop); 
                 return;
             }
 
+            // Sound logic: adjust frequency and volume based on distance to closest unfound leak
             let closestLeakDistance = Infinity;
             let activeLeakSound = false;
 
@@ -574,48 +616,57 @@
 
             if (soundInitialized && synth) {
                 if (activeLeakSound && gameRunning) { 
+                    // Calculate target frequency based on distance
                     const freqRange = soundMaxFreq - soundMinFreq;
                     let targetFrequency = soundMaxFreq - (closestLeakDistance / leakDetectionSoundRadius) * freqRange;
-                    targetFrequency = Math.max(soundMinFreq, Math.min(soundMaxFreq, targetFrequency));
-                    synth.frequency.rampTo(targetFrequency, 0.05);
+                    targetFrequency = Math.max(soundMinFreq, Math.min(soundMaxFreq, targetFrequency)); // Clamp frequency
+                    synth.frequency.rampTo(targetFrequency, 0.05); // Smooth transition
 
+                    // Calculate target volume based on distance
                     const volRange = soundMaxVol - soundMinVol; 
                     let targetVolume = soundMinVol + (1 - (closestLeakDistance / leakDetectionSoundRadius)) * volRange;
-                    targetVolume = Math.max(soundMinVol, Math.min(soundMaxVol, targetVolume));
-                    synth.volume.rampTo(targetVolume, 0.05);
+                    targetVolume = Math.max(soundMinVol, Math.min(soundMaxVol, targetVolume)); // Clamp volume
+                    synth.volume.rampTo(targetVolume, 0.05); // Smooth transition
 
                     if (synth.state === "stopped") {
-                        synth.start();
+                        synth.start(); // Start synth if it was stopped
                     }
-                } else { 
+                } else { // If no active leak sound or game not running
                     if (synth.state === "started") {
+                         // Fade out and stop the synth
                          synth.volume.rampTo(-Infinity, 0.2, Tone.now(), () => { 
                            if(synth.state === "started") synth.stop();
-                           synth.volume.value = soundMinVol; 
+                           synth.volume.value = soundMinVol; // Reset base volume for next potential start
                         });
                     }
                 }
             }
+            // Request next frame for the game loop
             animationFrameId_gameLoop = requestAnimationFrame(gameLoop);
         }
 
+        // Keyboard input handling
         const keysPressed = {};
         document.addEventListener('keydown', (event) => {
+            // Allow Escape to close banners even if game is not running
             if (event.key === 'Escape' && (infoBannerModalElement.classList.contains('show') || volumeBannerModalElement.classList.contains('show'))) {
                 infoBannerModalElement.classList.remove('show');
                 volumeBannerModalElement.classList.remove('show');
                 return;
             }
+            // Ignore input if game is not running (unless it's space for a banner button)
             if (!gameRunning && !(event.key === ' ' && infoBannerModalElement.classList.contains('show'))) return; 
             
-            keysPressed[event.key] = true;
+            keysPressed[event.key] = true; // Mark key as pressed
 
+            // Attempt to initialize audio on first key press if not already done
             if (!soundInitialized) { 
                 initializeAudio();
             }
 
+            // Handle leak detection with Spacebar
             if (event.key === ' ' && gameRunning) { 
-                event.preventDefault(); 
+                event.preventDefault(); // Prevent page scrolling
                 leaksArray.forEach(leak => {
                     if (!leak.found) {
                         const playerCenterX = player.x + playerWidth / 2;
@@ -624,11 +675,12 @@
                             (playerCenterX - leak.x) ** 2 +
                             (playerCenterY - leak.y) ** 2
                         );
+                        // Check if player is within detection proximity of the leak
                         if (distance < leakDetectionProximity + leak.radius) { 
                             leak.found = true;
                             leaksFoundCount++;
                             totalSavingsValue += leakValue;
-                            updateScoreDisplay(); 
+                            updateScoreDisplay(); // Update score and check for banner conditions
                         }
                     }
                 });
@@ -636,15 +688,17 @@
         });
 
         document.addEventListener('keyup', (event) => {
-            keysPressed[event.key] = false;
+            keysPressed[event.key] = false; // Mark key as released
         });
 
+        // Function to handle player movement based on pressed keys
         function handleMovement() {
-            if (!gameRunning) return; 
+            if (!gameRunning) return; // No movement if game is not running
 
             let newPlayerX = player.x;
             let newPlayerY = player.y;
 
+            // Update new X and Y based on pressed keys
             if (keysPressed['ArrowUp'] || keysPressed['w']) {
                 newPlayerY -= playerSpeed;
             }
@@ -658,17 +712,20 @@
                 newPlayerX += playerSpeed;
             }
             
+            // Define player's bounding box for collision with canvas edges
             const playerTop = newPlayerY - playerHeadRadius;
             const playerBottom = newPlayerY + playerHeight;
             const playerLeft = newPlayerX;
             const playerRight = newPlayerX + playerWidth;
 
+            // Boundary checks for canvas edges
             if (playerLeft < 0) newPlayerX = 0;
             if (playerRight > canvas.width) newPlayerX = canvas.width - playerWidth;
-            if (playerTop < 0) newPlayerY = playerHeadRadius; 
+            if (playerTop < 0) newPlayerY = playerHeadRadius; // Prevent head from going off screen
             if (playerBottom > canvas.height) newPlayerY = canvas.height - playerHeight;
 
-            const tempPlayerAttempt = { x: newPlayerX, y: newPlayerY }; 
+            // Collision detection with machines
+            const tempPlayerAttempt = { x: newPlayerX, y: newPlayerY }; // Proposed new position
             
             let collision = false;
             for (const machine of machinesArray) {
@@ -678,11 +735,13 @@
                 }
             }
             
+            // If no collision, update player position
             if (!collision) {
                  player.x = newPlayerX;
                  player.y = newPlayerY;
-            } else {
-                const tempPlayerXOnly = { ...player, x: newPlayerX };
+            } else { // If collision, try to slide along X or Y axis
+                // Try X-only movement
+                const tempPlayerXOnly = { ...player, x: newPlayerX }; // Keep current Y
                 let collisionX = false;
                 for (const machine of machinesArray) {
                     if (checkCollisionWithMachine(tempPlayerXOnly, machine)) {
@@ -691,10 +750,11 @@
                     }
                 }
                 if (!collisionX) {
-                    player.x = newPlayerX; 
+                    player.x = newPlayerX; // Allow X movement
                 }
 
-                const tempPlayerYOnly = { ...player, y: newPlayerY }; 
+                // Try Y-only movement
+                const tempPlayerYOnly = { ...player, y: newPlayerY }; // Keep current X (or updated X if X-move was allowed)
                  if(!collisionX) tempPlayerYOnly.x = player.x; 
 
                 let collisionY = false;
@@ -705,51 +765,61 @@
                     }
                 }
                 if (!collisionY) {
-                     player.y = newPlayerY; 
+                     player.y = newPlayerY; // Allow Y movement
                 }
             }
+            // Final boundary check after potential collision adjustments
             player.x = Math.max(0, Math.min(player.x, canvas.width - playerWidth));
             player.y = Math.max(playerHeadRadius, Math.min(player.y, canvas.height - playerHeight));
         }
         
+        // Loop for handling player movement
         function movementLoop() {
             handleMovement();
             animationFrameId_movementLoop = requestAnimationFrame(movementLoop);
         }
 
+        // Function to reset the info banner to its default state (for 3 leaks found)
         function resetInfoBannerToDefault() {
             infoBannerTitleElement.textContent = "Herzlichen Glückwunsch!";
+            // Use spans for dynamic values that might be updated by updateScoreDisplay
             infoBannerTextElement.innerHTML = `Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">3</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">600</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
             
+            // Clone and replace button to ensure correct "Weiterspielen" listener
             const newBannerBtn = closeInfoBannerButtonElement.cloneNode(true);
             newBannerBtn.textContent = "Weiterspielen";
             closeInfoBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeInfoBannerButtonElement);
-            closeInfoBannerButtonElement = newBannerBtn; 
+            closeInfoBannerButtonElement = newBannerBtn; // Update global reference
             closeInfoBannerButtonElement.onclick = () => infoBannerModalElement.classList.remove('show');
         }
 
-
+        // Function to start or restart the game
         function startGame() {
+            // Cancel any existing animation frames to prevent multiple loops
             if (animationFrameId_gameLoop) cancelAnimationFrame(animationFrameId_gameLoop);
             if (animationFrameId_movementLoop) cancelAnimationFrame(animationFrameId_movementLoop);
 
+            // Hide info banner, show volume banner
             infoBannerModalElement.classList.remove('show'); 
-            volumeBannerModalElement.classList.add('show'); // Show volume banner at start
-            resetInfoBannerToDefault(); 
+            volumeBannerModalElement.classList.add('show'); 
+            resetInfoBannerToDefault(); // Reset info banner text and button
 
-            setupGameElements(); 
-            updateScoreDisplay(); 
+            setupGameElements(); // Initialize all game elements and state
+            updateScoreDisplay(); // Update score display to initial values
             
+            // Handle audio initialization/reset
             if (!soundInitialized || (Tone.context && Tone.context.state !== 'running')) {
-                 // initializeAudio will be called by user interaction (keydown/click on volume banner)
+                 // Audio will be initialized by user interaction (keydown or click on volume banner)
             } else if (soundInitialized && synth ){
-                 if(synth.state === "started") synth.stop(); 
-                 synth.volume.value = soundMinVol; 
+                 if(synth.state === "started") synth.stop(); // Stop any previous sound
+                 synth.volume.value = soundMinVol; // Reset synth volume
             }
+            // Start game loops
             gameLoop(); 
             movementLoop(); 
         }
         
+        // Initial call to start the game when the page loads
         startGame();
 
     </script>
