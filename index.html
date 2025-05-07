@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leckage-Ortungsspiel V6 - Neustart Button</title>
+    <title>Leckage-Ortungsspiel V7 - Verbesserungen</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -50,7 +50,7 @@
             margin: 4px 0;
             font-size: 1.0em; 
         }
-        #bannerModal {
+        .modal { /* General modal style */
             position: fixed;
             top: 0;
             left: 0;
@@ -65,11 +65,11 @@
             visibility: hidden;
             transition: opacity 0.3s ease, visibility 0.3s ease;
         }
-        #bannerModal.show {
+        .modal.show {
             opacity: 1;
             visibility: visible;
         }
-        .banner-content {
+        .modal-content { /* General modal content style */
             background-color: white;
             padding: 25px 35px; 
             border-radius: 0.75rem;
@@ -78,12 +78,12 @@
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
             color: #1e293b;
         }
-        .banner-content h3 {
+        .modal-content h3 {
             font-size: 1.6em; 
             color: #0f172a;
             margin-bottom: 12px;
         }
-        .banner-content p {
+        .modal-content p {
             font-size: 1.0em; 
             margin-bottom: 20px;
             line-height: 1.5;
@@ -128,13 +128,22 @@
         <button id="restartGameButton" class="game-button">Spiel Neustarten</button>
     </div>
 
-    <div id="bannerModal">
-        <div class="banner-content">
-            <h3>Herzlichen Glückwunsch!</h3>
-            <p>Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">3</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">600</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.</p>
-            <button id="closeBannerButton" class="game-button">Weiterspielen</button>
+    <div id="infoBannerModal" class="modal">
+        <div class="modal-content">
+            <h3 id="infoBannerTitle">Herzlichen Glückwunsch!</h3>
+            <p id="infoBannerText">Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">3</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">600</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.</p>
+            <button id="closeInfoBannerButton" class="game-button">Weiterspielen</button>
         </div>
     </div>
+
+    <div id="volumeBannerModal" class="modal">
+        <div class="modal-content">
+            <h3>Hinweis zur Lautstärke</h3>
+            <p>Für das beste Spielerlebnis und um die Leckagen akustisch orten zu können, erhöhe bitte die Lautstärke deines Geräts und verwende ggf. Kopfhörer.</p>
+            <button id="closeVolumeBannerButton" class="game-button">Verstanden!</button>
+        </div>
+    </div>
+
 
     <script>
         // Canvas and context access
@@ -147,15 +156,20 @@
         const savingsDisplayElement = document.getElementById('savingsDisplay');
         const co2SavingsDisplayElement = document.getElementById('co2SavingsDisplay');
         
-        // Banner elements
-        const bannerModalElement = document.getElementById('bannerModal');
-        const bannerLeaksFoundElement = document.getElementById('bannerLeaksFound');
-        const bannerSavingsDisplayElement = document.getElementById('bannerSavingsDisplay');
-        let closeBannerButtonElement = document.getElementById('closeBannerButton'); // Use let for reassignment
+        // Info Banner elements
+        const infoBannerModalElement = document.getElementById('infoBannerModal');
+        const infoBannerTitleElement = document.getElementById('infoBannerTitle');
+        const infoBannerTextElement = document.getElementById('infoBannerText');
+        const bannerLeaksFoundElement = document.getElementById('bannerLeaksFound'); // Still needed if text is dynamic
+        const bannerSavingsDisplayElement = document.getElementById('bannerSavingsDisplay'); // Still needed
+        let closeInfoBannerButtonElement = document.getElementById('closeInfoBannerButton');
         
+        // Volume Banner elements
+        const volumeBannerModalElement = document.getElementById('volumeBannerModal');
+        const closeVolumeBannerButtonElement = document.getElementById('closeVolumeBannerButton');
+
         // Restart button
         const restartGameButtonElement = document.getElementById('restartGameButton');
-
 
         // Game parameters
         const playerWidth = 20; 
@@ -164,7 +178,8 @@
         const playerSpeed = 3.5; 
         const initialLeakRadius = 8; 
         const foundLeakRadius = 6; 
-        const leakDetectionProximity = 15; 
+        const leakDetectionProximity = 30; // Increased radius for easier detection
+        const playerHighlightRadius = 25; // Radius for player visual highlight when very close to an unfound leak
         const leakDetectionSoundRadius = 190; 
         const leakValue = 200; 
         const co2Factor = 0.15;
@@ -176,13 +191,13 @@
         const soundMinVol = -30; 
         const soundMaxVol = -12; 
 
-
         let player = {
             x: 50,
             y: 50,
             colorBody: '#3b82f6', 
             colorHead: '#fcd34d', 
-            shirtText: 'Mader'
+            shirtText: 'Mader',
+            isHighlighted: false // Flag for visual highlight
         };
 
         let leaksArray = []; 
@@ -215,7 +230,12 @@
             }
         }
         
+        // Initial audio context start attempt on any key press (important for browsers)
         document.addEventListener('keydown', initializeAudio, { once: true });
+        // Also attempt on first click/touch for mobile or mouse users before keyboard interaction
+        document.addEventListener('click', initializeAudio, { once: true });
+        document.addEventListener('touchstart', initializeAudio, { once: true });
+
 
         function setupGameElements() {
             canvas.width = gameAreaWidth;
@@ -223,6 +243,7 @@
 
             player.x = canvas.width / 2 - playerWidth / 2;
             player.y = canvas.height / 2 - playerHeight / 2;
+            player.isHighlighted = false;
             
             leaksArray = []; 
             machinesArray = [];
@@ -298,6 +319,7 @@
         }
 
         function drawPlayer() {
+            // Normal player drawing
             ctx.fillStyle = player.colorBody;
             ctx.fillRect(player.x, player.y, playerWidth, playerHeight);
             ctx.fillStyle = player.colorHead;
@@ -308,6 +330,28 @@
             ctx.font = 'bold 10px Inter';
             ctx.textAlign = 'center';
             ctx.fillText(player.shirtText, player.x + playerWidth / 2, player.y + playerHeight / 2 + 3);
+
+            // Visual highlight if player is close to an unfound leak
+            if (player.isHighlighted) {
+                ctx.strokeStyle = '#FFD700'; // Gold color for highlight
+                ctx.lineWidth = 2.5; // Slightly thinner highlight
+                // Highlight around the body
+                ctx.strokeRect(
+                    player.x - ctx.lineWidth / 2, 
+                    player.y - ctx.lineWidth / 2, 
+                    playerWidth + ctx.lineWidth, 
+                    playerHeight + ctx.lineWidth
+                );
+                // Highlight around the head
+                ctx.beginPath();
+                ctx.arc(
+                    player.x + playerWidth / 2, 
+                    player.y - playerHeadRadius / 2 + 2, 
+                    playerHeadRadius + ctx.lineWidth / 2, 
+                    0, Math.PI * 2
+                );
+                ctx.stroke();
+            }
         }
         
         function drawHallBackground() {
@@ -377,40 +421,44 @@
             const currentCo2Savings = totalSavingsValue * co2Factor;
             co2SavingsDisplayElement.textContent = currentCo2Savings.toFixed(2);
 
-            if (leaksFoundCount === 3 && !bannerModalElement.classList.contains('show') && gameRunning) {
-                bannerLeaksFoundElement.textContent = leaksFoundCount;
-                bannerSavingsDisplayElement.textContent = totalSavingsValue;
-                document.querySelector('#bannerModal .banner-content h3').textContent = "Herzlichen Glückwunsch!"; 
-                document.querySelector('#bannerModal .banner-content p').innerHTML = `Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">${leaksFoundCount}</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">${totalSavingsValue}</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
-                
-                // Ensure the banner button is for "Weiterspielen"
-                const newBannerBtn = closeBannerButtonElement.cloneNode(true);
-                newBannerBtn.textContent = "Weiterspielen";
-                closeBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeBannerButtonElement);
-                closeBannerButtonElement = newBannerBtn; // Update reference
-                closeBannerButtonElement.onclick = () => bannerModalElement.classList.remove('show'); // Simple hide
+            // Using bannerLeaksFoundElement and bannerSavingsDisplayElement inside the text strings
+            const bannerLeaksFoundHTML = `<span id="bannerLeaksFound">${leaksFoundCount}</span>`;
+            const bannerSavingsHTML = `<span id="bannerSavingsDisplay">${totalSavingsValue}</span>`;
 
-                bannerModalElement.classList.add('show');
+
+            if (leaksFoundCount === 3 && !infoBannerModalElement.classList.contains('show') && gameRunning) {
+                infoBannerTitleElement.textContent = "Herzlichen Glückwunsch!"; 
+                infoBannerTextElement.innerHTML = `Mit nur wenigen Klicks hast du bereits ${bannerLeaksFoundHTML} Leckagen und ein jährliches Einsparpotenzial von ${bannerSavingsHTML}€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
+                
+                const newBannerBtn = closeInfoBannerButtonElement.cloneNode(true);
+                newBannerBtn.textContent = "Weiterspielen";
+                closeInfoBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeInfoBannerButtonElement);
+                closeInfoBannerButtonElement = newBannerBtn; 
+                closeInfoBannerButtonElement.onclick = () => infoBannerModalElement.classList.remove('show'); 
+
+                infoBannerModalElement.classList.add('show');
             }
             
             if (leaksArray.length > 0 && leaksFoundCount === leaksArray.length && gameRunning) { 
                 gameRunning = false; 
                 setTimeout(() => { 
-                    bannerLeaksFoundElement.textContent = leaksFoundCount; 
-                    bannerSavingsDisplayElement.textContent = totalSavingsValue; 
-                    document.querySelector('#bannerModal .banner-content h3').textContent = "Alle Lecks gefunden!";
-                    document.querySelector('#bannerModal .banner-content p').innerHTML = `Fantastisch! Du hast alle ${leaksFoundCount} Leckagen gefunden und ein Gesamt-Einsparpotenzial von ${totalSavingsValue}€ aufgedeckt. <br>Kontaktiere uns, um dieses Potenzial auch in deiner Produktion zu realisieren!`;
+                    // Update dynamic spans for the final banner text
+                    const finalBannerLeaksFoundHTML = `<span id="bannerLeaksFound">${leaksFoundCount}</span>`;
+                    const finalBannerSavingsHTML = `<span id="bannerSavingsDisplay">${totalSavingsValue}</span>`;
+
+                    infoBannerTitleElement.textContent = "Alle Lecks gefunden!";
+                    infoBannerTextElement.innerHTML = `Fantastisch! Du hast alle ${finalBannerLeaksFoundHTML} Leckagen gefunden und ein Gesamt-Einsparpotenzial von ${finalBannerSavingsHTML}€ aufgedeckt. <br>Kontaktiere uns, um dieses Potenzial auch in deiner Produktion zu realisieren!`;
                     
-                    const newBannerBtn = closeBannerButtonElement.cloneNode(true);
+                    const newBannerBtn = closeInfoBannerButtonElement.cloneNode(true);
                     newBannerBtn.textContent = "Neustart";
-                    closeBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeBannerButtonElement);
-                    closeBannerButtonElement = newBannerBtn; // Update reference
-                    closeBannerButtonElement.onclick = () => { // Assign restart logic
-                        bannerModalElement.classList.remove('show');
+                    closeInfoBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeInfoBannerButtonElement);
+                    closeInfoBannerButtonElement = newBannerBtn; 
+                    closeInfoBannerButtonElement.onclick = () => { 
+                        infoBannerModalElement.classList.remove('show');
                         startGame();
                     };
 
-                    bannerModalElement.classList.add('show');
+                    infoBannerModalElement.classList.add('show');
                     
                     if (soundInitialized && synth && synth.state === "started") {
                         synth.stop(); 
@@ -419,21 +467,27 @@
             }
         }
         
-        // Event listener for the main restart button (outside the banner)
         restartGameButtonElement.addEventListener('click', () => {
             if (soundInitialized && synth && synth.state === "started") {
-                synth.stop(); // Stop sound immediately on manual restart
+                synth.stop(); 
             }
             startGame();
         });
 
-        // Initial setup for the banner close button (handles "Weiterspielen")
-        // This will be overridden if the "Alle Lecks gefunden" banner appears.
-        closeBannerButtonElement.onclick = () => {
+        closeInfoBannerButtonElement.onclick = () => {
             if (gameRunning) { 
-                 bannerModalElement.classList.remove('show');
+                 infoBannerModalElement.classList.remove('show');
             }
         };
+
+        closeVolumeBannerButtonElement.addEventListener('click', () => {
+            volumeBannerModalElement.classList.remove('show');
+            // Optional: Start audio context here if not already started,
+            // as this is a definite user interaction.
+            if (!soundInitialized) {
+                initializeAudio();
+            }
+        });
 
 
         function checkCollisionWithMachine(playerObj, machineObj) {
@@ -461,9 +515,27 @@
             drawPipes(); 
             drawMachines(); 
             drawLeaks(); 
-            drawPlayer();
+            // Player highlight status update
+            player.isHighlighted = false; // Reset before check
+            if (gameRunning) {
+                for (const leak of leaksArray) {
+                    if (!leak.found) {
+                        const playerCenterX = player.x + playerWidth / 2;
+                        const playerCenterY = player.y + playerHeight / 2 - playerHeadRadius / 2;
+                        const distance = Math.sqrt(
+                            (playerCenterX - leak.x) ** 2 +
+                            (playerCenterY - leak.y) ** 2
+                        );
+                        if (distance < playerHighlightRadius) {
+                            player.isHighlighted = true;
+                            break; 
+                        }
+                    }
+                }
+            }
+            drawPlayer(); // Draw player after highlight status is set
 
-            if (!gameRunning && !bannerModalElement.classList.contains('show')) { 
+            if (!gameRunning && !infoBannerModalElement.classList.contains('show')) { 
                  ctx.fillStyle = 'rgba(0,0,0,0.7)';
                  ctx.fillRect(0,0,canvas.width, canvas.height);
                  ctx.font = "28px Inter";
@@ -529,11 +601,12 @@
 
         const keysPressed = {};
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && bannerModalElement.classList.contains('show')) {
-                bannerModalElement.classList.remove('show');
+            if (event.key === 'Escape' && (infoBannerModalElement.classList.contains('show') || volumeBannerModalElement.classList.contains('show'))) {
+                infoBannerModalElement.classList.remove('show');
+                volumeBannerModalElement.classList.remove('show');
                 return;
             }
-            if (!gameRunning && !(event.key === ' ' && bannerModalElement.classList.contains('show'))) return; 
+            if (!gameRunning && !(event.key === ' ' && infoBannerModalElement.classList.contains('show'))) return; 
             
             keysPressed[event.key] = true;
 
@@ -644,19 +717,15 @@
             animationFrameId_movementLoop = requestAnimationFrame(movementLoop);
         }
 
-        function resetBannerToDefault() {
-            const bannerH3 = document.querySelector('#bannerModal .banner-content h3');
-            const bannerP = document.querySelector('#bannerModal .banner-content p');
+        function resetInfoBannerToDefault() {
+            infoBannerTitleElement.textContent = "Herzlichen Glückwunsch!";
+            infoBannerTextElement.innerHTML = `Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">3</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">600</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
             
-            bannerH3.textContent = "Herzlichen Glückwunsch!";
-            bannerP.innerHTML = `Mit nur wenigen Klicks hast du bereits <span id="bannerLeaksFound">3</span> Leckagen und ein jährliches Einsparpotenzial von <span id="bannerSavingsDisplay">600</span>€ geortet. Finde alle Leckagen, um das volle Potenzial zu entdecken! Du willst auch in deiner Produktion das Einsparpotenzial wissen? Dann kontaktiere uns jetzt unter: <a href="mailto:info@mader-gmbh.de" class="text-blue-600 hover:underline">info@mader-gmbh.de</a> oder telefonisch unter +49 123 456789.`;
-            
-            // Ensure banner button is set for "Weiterspielen"
-            const newBannerBtn = closeBannerButtonElement.cloneNode(true);
+            const newBannerBtn = closeInfoBannerButtonElement.cloneNode(true);
             newBannerBtn.textContent = "Weiterspielen";
-            closeBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeBannerButtonElement);
-            closeBannerButtonElement = newBannerBtn; // Update global reference
-            closeBannerButtonElement.onclick = () => bannerModalElement.classList.remove('show');
+            closeInfoBannerButtonElement.parentNode.replaceChild(newBannerBtn, closeInfoBannerButtonElement);
+            closeInfoBannerButtonElement = newBannerBtn; 
+            closeInfoBannerButtonElement.onclick = () => infoBannerModalElement.classList.remove('show');
         }
 
 
@@ -664,16 +733,15 @@
             if (animationFrameId_gameLoop) cancelAnimationFrame(animationFrameId_gameLoop);
             if (animationFrameId_movementLoop) cancelAnimationFrame(animationFrameId_movementLoop);
 
-            bannerModalElement.classList.remove('show'); 
-            resetBannerToDefault(); 
+            infoBannerModalElement.classList.remove('show'); 
+            volumeBannerModalElement.classList.add('show'); // Show volume banner at start
+            resetInfoBannerToDefault(); 
 
             setupGameElements(); 
             updateScoreDisplay(); 
             
             if (!soundInitialized || (Tone.context && Tone.context.state !== 'running')) {
-                 initializeAudio().then(() => {
-                    if (synth && synth.state === "stopped") synth.volume.value = soundMinVol; 
-                 });
+                 // initializeAudio will be called by user interaction (keydown/click on volume banner)
             } else if (soundInitialized && synth ){
                  if(synth.state === "started") synth.stop(); 
                  synth.volume.value = soundMinVol; 
